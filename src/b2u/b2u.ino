@@ -78,7 +78,12 @@ void setup()
 
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
-    // pAdvertising->setPreferredParams(6, 12);
+    pAdvertising->setPreferredParams(6, 12);
+
+    NimBLEAdvertisementData scanResponse;
+    scanResponse.setName("ESP32_PaperTape");
+    pAdvertising->setScanResponseData(scanResponse);
+
     pAdvertising->start();
 
     Serial.println("BLE started. Waiting for connection...");
