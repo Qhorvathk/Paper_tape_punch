@@ -181,7 +181,7 @@ class RxCallbacks : public NimBLECharacteristicCallbacks
 					New_name = true; //////////////<<< itt kapom meg a sort
                 }
             }
-            else if (isPrintable(c) && bufferIndex < BUFFER_SIZE - 1)  // !!!!!!Cseréltem
+            else if (isPrintable(c) && bufferIndex < BUFFER_SIZE - 1) 
             {
                 inputBuffer[bufferIndex++] = c;
             }
