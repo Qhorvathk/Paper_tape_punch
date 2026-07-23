@@ -292,6 +292,14 @@ void Bits_out (char value) {
 */
 ///+++++++++++++++++++++++++++++
 
+void sendBleMessage(const char *msg) {
+    if (deviceConnected) {
+        String payload = String(msg) + "\n";
+        pTxCharacteristic->setValue((uint8_t *)payload.c_str(), payload.length());
+        pTxCharacteristic->notify();
+    }
+}
+
 void setup() {
     Serial.begin(115200); 
     // setup paperpunch's input
@@ -357,6 +365,7 @@ void loop()  {
   };
  New_name = false;
  bufferIndex = 0;
+ sendBleMessage("Data sent to paper tape");
  }
  delay(500);
  digitalWrite(DRS, LOW);  // record szinten kéne kezelni !!!!!!!!!
