@@ -39,7 +39,7 @@ uint8_t bufferIndex = 0;
 const int pin_bus[8] = {D0, D1, D2, D3, D4, D5, D6, D7};
 
 uint8_t Fonts5x7[96][5] = {     // ASCII table without control characters.
-   {0x00, 0x00, 0x00, 0x00, 0x00}, // sp
+   {0x00,0x00,0x00,0x00,0x00}, // sp
    {0x00, 0x2f, 0x00, 0x00, 0x00}, // !
    {0x00, 0x00, 0x07, 0x00, 0x00}, // "
    {0x00, 0x14, 0x7f, 0x14, 0x00}, // #
@@ -141,24 +141,26 @@ uint8_t Fonts5x7[96][5] = {     // ASCII table without control characters.
 // Global bitmask that covers all 8 pins combined
 uint32_t set_mask = 0;
 uint32_t bus_mask = 0;
+unsigned long startTime = millis();
+
 
 volatile bool Ready = false;
 volatile bool PaperOut = false;
 volatile bool New_name = false;
+bool Request = true;
 
 class ServerCallbacks : public NimBLEServerCallbacks
 {
     void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
     {
         deviceConnected = true;
-        Serial.println("Client connected");
+        // Serial.println("Client connected");
     }
 
     void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
     {
         deviceConnected = false;
-        Serial.println("Client disconnected");
-        NimBLEDevice::startAdvertising();
+       // Serial.println("Client disconnected");
     }
 };
 
@@ -176,9 +178,8 @@ class RxCallbacks : public NimBLECharacteristicCallbacks
             {
                 if (bufferIndex > 0)
                 {
-                    inputBuffer[bufferIndex] = '\0';
-                    Serial.println(inputBuffer);               
-					New_name = true; //////////////<<< itt kapom meg a sort
+                    inputBuffer[bufferIndex] = '\0';           
+					New_name = true;                    // semafor for recieved string 
                 }
             }
             else if (isPrintable(c) && bufferIndex < BUFFER_SIZE - 1) 
@@ -261,36 +262,23 @@ void write8BitBus(uint8_t  value) {
    if (value & (1 << 6)) set_mask |= (1ULL << D6);
    if (value & (1 << 7)) set_mask |= (1ULL << D7);
  // Read current register, clear our bus pins, inject new states,
- //      Serial.println(bus_mask, BIN);
- //      Serial.println(set_mask, BIN);
  GPIO.out = (GPIO.out & ~bus_mask) | set_mask;
 };
-
-//
- void PunchByte (uint8_t value) {
- write8BitBus(value);
- delayMicroseconds(5);
- digitalWrite(WD, HIGH);
- delay(1);
- digitalWrite(WD, LOW);
-};
-
-/*
-void Bits_out (char value) {
-    if (value & (1 << 0)) {  digitalWrite(D0, HIGH); } else {  digitalWrite(D0, LOW); };
-    if (value & (1 << 1)) {  digitalWrite(D1, HIGH); } else {  digitalWrite(D1, LOW); };
-    if (value & (1 << 2)) {  digitalWrite(D2, HIGH); } else {  digitalWrite(D2, LOW); };
-    if (value & (1 << 3)) {  digitalWrite(D3, HIGH); } else {  digitalWrite(D3, LOW); };
-    if (value & (1 << 4)) {  digitalWrite(D4, HIGH); } else {  digitalWrite(D4, LOW); };
-    if (value & (1 << 5)) {  digitalWrite(D5, HIGH); } else {  digitalWrite(D5, LOW); };
-    if (value & (1 << 6)) {  digitalWrite(D6, HIGH); } else {  digitalWrite(D6, LOW); };
-    if (value & (1 << 7)) {  digitalWrite(D7, HIGH); } else {  digitalWrite(D7, LOW); };
-     delayMicroseconds(10);
+// Following the interface timing.
+ uint8_t PunchByte (uint8_t value) {
+    startTime = millis() ;
+    while (!Ready && !PaperOut) {       //  wait for ready or refil paper
+        if (millis() - startTime >= 3000) {
+         sendBleMessage("Device is not ready or Paper consumed!");   
+        return 0;   };                 // Timeout after 3 sec   
+     };   
+    write8BitBus(value);
+    delayMicroseconds(5);
     digitalWrite(WD, HIGH);
     delay(1);
-    digitalWrite(WD, LOW); };
-*/
-///+++++++++++++++++++++++++++++
+    digitalWrite(WD, LOW);
+    return 1 ;
+};
 
 void sendBleMessage(const char *msg) {
     if (deviceConnected) {
@@ -299,9 +287,9 @@ void sendBleMessage(const char *msg) {
         pTxCharacteristic->notify();
     }
 }
-
+//===================== Entry for Setup
 void setup() {
-    Serial.begin(115200); 
+    // Serial.begin(115200); 
     // setup paperpunch's input
     inputs_setup();
     // setup bloetooth
@@ -332,7 +320,7 @@ void setup() {
 
     pAdvertising->start();
 
-    Serial.println("BLE started. Waiting for connection...");
+ // Serial.println("BLE started. Waiting for connection...");
 	
  // setup  paperpunch's data and controll bits
  // Configure pins as outputs and calculate the global master mask
@@ -348,28 +336,47 @@ void setup() {
     digitalWrite(DRS, LOW); 
     digitalWrite(WD, LOW);
     write8BitBus(0x00); 
-};
+//
 
+};
+//===================== Entry for Duty
 void loop()  {
  // put your main code here, to run repeatedly:
- uint8_t i = 0, j = 0 , k = 0  ;
- while (New_name) {
-  digitalWrite(DRS, HIGH);  // 
-  for( i=0; i< bufferIndex; i++) {
-    for ( j=0; j<5; j++) {
-       while (!Ready && !PaperOut) {  // Ready and PaperOut must be high
-        k = Fonts5x7[i][j];
-        PunchByte( k) ;
-        };
-    };
-  };
- New_name = false;
- bufferIndex = 0;
- sendBleMessage("Data sent to paper tape");
- }
- delay(500);
- digitalWrite(DRS, LOW);  // record szinten kéne kezelni !!!!!!!!!
-};
+  uint8_t i = 0, j = 0 , Return_status = 0;
+  while (New_name) {                 // Bluethoot sent a record
+        digitalWrite(DRS, HIGH);          // Dataset Ready for sending
+        //
+        for( i=0; i< bufferIndex; i++) {
+             Return_status = PunchByte(inputBuffer[i]);      //punch out recor in binary
+             if (!Return_status) {break;}
+             };
+        for( i=0; i< 5; i++) {
+             Return_status = PunchByte(0x00);      // Punche one space
+             if (!Return_status) {break;}
+            };         
+        // punch out the record as a pictures of the record's characters.
+        for( i=0; i< bufferIndex; i++) {     // loop for converting record to caracter
+             for ( j=0; j<5; j++) {             // loop for converting caracter to font
+                 Return_status = PunchByte(Fonts5x7[inputBuffer[i]-0x20] [j] );  // relocate caracter to the begining of font table and select the font
+                 if (!Return_status) {break;}
+                 };
+             Return_status = PunchByte(0x00);               // left one column among the character
+             if (!Return_status) {break;}
+             };
+         //
+         if (!Return_status) { sendBleMessage("Sikertelen lyukasztas!");} else {sendBleMessage("Kilyukasztva");}
+         New_name = false;      // record has benn punched out
+         bufferIndex = 0;       // reset record lenght
+         Request = true;        // asking for new name
+     } ;
+ /*
+   if(Request == true) {sendBleMessage("Adjon meg egy nevet"); };
+   Request = false; 
+*/
+   delay(500);
+   digitalWrite(DRS, LOW);  // No more punching
+ };
+ 
 
 
 
