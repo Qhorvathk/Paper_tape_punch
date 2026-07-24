@@ -17,7 +17,7 @@
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
 NimBLECharacteristic *pTxCharacteristic;
-bool deviceConnected = false;
+volatile bool deviceConnected = false;
 
 #define BUFFER_SIZE 128
 char inputBuffer[BUFFER_SIZE];
@@ -48,7 +48,7 @@ unsigned long startTime = millis();
 volatile bool Ready = false;
 volatile bool PaperOut = false;
 volatile bool New_name = false;
-bool Request = false;
+volatile bool Request = false;
 
 class ServerCallbacks : public NimBLEServerCallbacks
 {
@@ -201,7 +201,7 @@ void sendBleMessage(const char *msg)
 void setup()
 {
 
-    //  Serial.begin(115200);            // serial monitor
+     Serial.begin(115200);            // serial monitor
 
     // setup paperpunch's input
     inputs_setup();
@@ -256,6 +256,7 @@ void loop()
 {
     if (Request && deviceConnected)
     {
+        delay(1000);
         sendBleMessage("Adjon meg egy nevet!");
         Request = false;
     };
@@ -264,27 +265,9 @@ void loop()
     {
         sendBleMessage("Lyukasztas folyamatban...");
 
-        uint8_t i = 0, j = 0, Return_status = false;
+        bool ret = DoPunching();
 
-        while (New_name)
-        {
-            StartPunching();
-
-            Return_status = PunchBuffer(inputBuffer, bufferIndex);
-
-            if (!Return_status)
-                break;
-
-            Return_status = PunchByteMultiple(0x00, 5);
-            if (!Return_status)
-                break;
-
-            Return_status = PunchBufferAsPictures(inputBuffer, bufferIndex);
-            if (!Return_status)
-                break;
-        };
-
-        sendBleMessage(!Return_status ? "Sikertelen lyukasztas!" : "Kilyukasztva.");
+        sendBleMessage(!ret ? "Sikertelen lyukasztas!" : "Kilyukasztva.");
 
         bufferIndex = 0; // reset record lenght
         New_name = false;
@@ -307,8 +290,29 @@ void StopPunching()
     digitalWrite(DRS, LOW); // No more punching
 };
 
+bool DoPunching(){
+    bool ret = false;
+
+    Serial.println("Start punching...");
+    StartPunching();
+
+    ret = PunchBuffer(inputBuffer, bufferIndex);
+
+    if (!ret) return ret;
+
+    ret = PunchByteMultiple(0x00, 5);
+    if (!ret) return ret;
+
+    ret = PunchBufferAsPictures(inputBuffer, bufferIndex);
+    if (!ret) return ret;
+
+    return ret;
+}
+
 uint8_t PunchBuffer(char *buffer, uint8_t length)
 {
+    Serial.println("PunchBuffer...");
+
     uint8_t i = 0, Return_status = false;
     for (i = 0; i < length; i++)
     {
@@ -321,6 +325,8 @@ uint8_t PunchBuffer(char *buffer, uint8_t length)
 
 uint8_t PunchByteMultiple(uint8_t value, uint8_t count)
 {
+    Serial.println("PunchByteMultiple...");
+
     uint8_t i = 0;
     bool ret = false;
     for (i = 0; i < count; i++)
@@ -336,6 +342,8 @@ uint8_t PunchByteMultiple(uint8_t value, uint8_t count)
 
 uint8_t PunchBufferAsPictures(char *buffer, uint8_t length)
 {
+    Serial.println("PunchBufferAsPictures...");
+
     uint8_t i = 0, j = 0, ret = false;
     for (i = 0; i < length; i++)
     {
