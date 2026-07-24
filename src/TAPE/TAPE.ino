@@ -154,13 +154,13 @@ class ServerCallbacks : public NimBLEServerCallbacks
     void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
     {
         deviceConnected = true;
-        // Serial.println("Client connected");
+    //    Serial.println("Client connected");
     }
 
     void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
     {
         deviceConnected = false;
-       // Serial.println("Client disconnected");
+    //    Serial.println("Client disconnected");
     }
 };
 
@@ -270,14 +270,14 @@ void write8BitBus(uint8_t  value) {
     while (!Ready && !PaperOut) {       //  wait for ready or refil paper
         if (millis() - startTime >= 3000) {
          sendBleMessage("Device is not ready or Paper consumed!");   
-        return 0;   };                 // Timeout after 3 sec   
+        return false;   };                 // Timeout after 3 sec   
      };   
     write8BitBus(value);
     delayMicroseconds(5);
     digitalWrite(WD, HIGH);
     delay(1);
     digitalWrite(WD, LOW);
-    return 1 ;
+    return true ;
 };
 
 void sendBleMessage(const char *msg) {
@@ -286,10 +286,16 @@ void sendBleMessage(const char *msg) {
         pTxCharacteristic->setValue((uint8_t *)payload.c_str(), payload.length());
         pTxCharacteristic->notify();
     }
-}
+};
+
+
+
 //===================== Entry for Setup
 void setup() {
-    // Serial.begin(115200); 
+
+    //  Serial.begin(115200);            // serial monitor 
+
+
     // setup paperpunch's input
     inputs_setup();
     // setup bloetooth
@@ -318,11 +324,9 @@ void setup() {
     scanResponse.setName("ESP32_PaperTape");
     pAdvertising->setScanResponseData(scanResponse);
 
-    pAdvertising->start();
-
- // Serial.println("BLE started. Waiting for connection...");
+    pAdvertising->start();     // Serial.println("BLE started. Waiting for connection...");
 	
- // setup  paperpunch's data and controll bits
+ // setup  paperpunch's data and controll lines
  // Configure pins as outputs and calculate the global master mask
  for(int i = 0 ; i < 8 ; i++) {
    pinMode(pin_bus[i],OUTPUT);
@@ -336,13 +340,13 @@ void setup() {
     digitalWrite(DRS, LOW); 
     digitalWrite(WD, LOW);
     write8BitBus(0x00); 
-//
-
 };
+
+
 //===================== Entry for Duty
 void loop()  {
  // put your main code here, to run repeatedly:
-  uint8_t i = 0, j = 0 , Return_status = 0;
+  uint8_t i = 0, j = 0 , Return_status = false;
   while (New_name) {                 // Bluethoot sent a record
         digitalWrite(DRS, HIGH);          // Dataset Ready for sending
         //
@@ -369,12 +373,13 @@ void loop()  {
          bufferIndex = 0;       // reset record lenght
          Request = true;        // asking for new name
      } ;
- /*
-   if(Request == true) {sendBleMessage("Adjon meg egy nevet"); };
-   Request = false; 
-*/
-   delay(500);
-   digitalWrite(DRS, LOW);  // No more punching
+    if(Request && deviceConnected) {delay(1);};  // ??????????????? enélkül nem mehgy ????????, de elsőre így sem írja ki. 
+    if(Request && deviceConnected) {
+      sendBleMessage("Adjon meg egy nevet");
+      Request = false ;
+      };
+    delay(500);
+    digitalWrite(DRS, LOW);  // No more punching
  };
  
 
